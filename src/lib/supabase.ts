@@ -22,3 +22,23 @@ export function getSupabaseServerClient(): SupabaseClient | null {
     auth: { persistSession: false },
   });
 }
+
+/**
+ * Server-side ADMIN client using the service-role key. Bypasses RLS.
+ *
+ * Use ONLY in trusted server code (never expose to the client). Powers the
+ * listing create flow (photo upload + listing insert) so we don't need to
+ * open any public write policy. Returns null if the key isn't configured.
+ */
+export function getSupabaseAdminClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey) {
+    return null;
+  }
+
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

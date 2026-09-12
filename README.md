@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Motrfolio
 
-## Getting Started
+**Ek link mein poori gaadi.** — AI-powered car listings for India's used-car dealers.
 
-First, run the development server:
+Upload photos + a 30-second voice note; Motrfolio's AI produces a clean, shareable
+listing page per vehicle in under 60 seconds. The UI follows an internal design system
+(warm marketplace, clean white canvas, Rausch accent).
+
+## Tech stack
+
+- **Next.js 14** (App Router) + **TypeScript**
+- **Tailwind CSS** (design tokens from the internal design system)
+- **Supabase** — Postgres + Auth + Storage
+- **Claude API** — listing copy, buyer-enquiry replies
+- **OpenAI Whisper** — voice-note transcription
+- **Interakt** — WhatsApp Business API
+- Deployed on **Vercel**
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # then fill in your keys
+npm install
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The waitlist form works without Supabase configured (it no-ops server-side and returns
+success) so you can develop the UI immediately. To persist signups, set the Supabase env
+vars and apply the migration.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Apply the waitlist schema in the Supabase SQL editor, or with the Supabase CLI:
 
-## Learn More
+```bash
+supabase db push   # runs supabase/migrations/*.sql
+```
 
-To learn more about Next.js, take a look at the following resources:
+`supabase/migrations/0001_waitlist.sql` creates the `waitlist` table with RLS that allows
+anonymous INSERTs only (the public site uses the anon key; the list is not readable with it).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+  app/
+    api/waitlist/route.ts   # POST endpoint that stores signups
+    layout.tsx              # metadata, fonts
+    page.tsx                # marketing landing page
+    globals.css
+  components/
+    WaitlistForm.tsx        # client-side waitlist form
+  lib/
+    supabase.ts             # server-side Supabase client factory
+supabase/
+  migrations/               # SQL schema
+```
 
-## Deploy on Vercel
+## Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+| `npm run lint` | ESLint |

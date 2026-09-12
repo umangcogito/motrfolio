@@ -34,3 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# confidential internal docs (kept local, not pushed)
+Motrfolio-blueprint.md
+DESIGN-airbnb.md

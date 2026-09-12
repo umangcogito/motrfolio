@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { transcribeAudio, generateListingContent } from "@/lib/generateListing";
+import { normalizeImage } from "@/lib/images";
 import { makeSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
@@ -53,13 +54,12 @@ export async function POST(req: Request) {
   const folder = crypto.randomUUID();
   const imageUrls: string[] = [];
   for (let i = 0; i < photos.length; i++) {
-    const file = photos[i];
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().slice(0, 5);
+    // Convert HEIC (iPhone) → JPEG so OpenAI vision accepts the image.
+    const { data, contentType, ext } = await normalizeImage(photos[i]);
     const path = `${folder}/${i}.${ext}`;
-    const bytes = Buffer.from(await file.arrayBuffer());
     const { error } = await admin.storage
       .from(BUCKET)
-      .upload(path, bytes, { contentType: file.type || "image/jpeg", upsert: false });
+      .upload(path, data, { contentType, upsert: false });
     if (error) {
       console.error("[create] photo upload failed:", error.message);
       return bad("Could not upload photos. Please try again.", 500);
@@ -76,13 +76,19 @@ export async function POST(req: Request) {
     // Non-fatal: continue with photos only.
   }
 
-  // 3) Generate the structured listing.
+  // 3) Generate the structured listing. If the vision call fails (e.g. an
+  //    odd image), retry from the transcript alone so we still get a listing.
   let gen;
   try {
     gen = await generateListingContent({ imageUrls, transcript });
   } catch (e) {
-    console.error("[create] generation failed:", e);
-    return bad("The AI could not generate a listing. Please try again.", 502);
+    console.error("[create] generation failed, retrying without images:", e);
+    try {
+      gen = await generateListingContent({ imageUrls: [], transcript });
+    } catch (e2) {
+      console.error("[create] generation retry failed:", e2);
+      return bad("The AI could not generate a listing. Please try again.", 502);
+    }
   }
   if (!gen) return bad("AI is not configured (missing OPENAI_API_KEY).", 503);
 

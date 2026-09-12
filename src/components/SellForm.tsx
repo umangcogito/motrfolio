@@ -77,7 +77,20 @@ export default function SellForm() {
     fd.append("dealer_city", (data.get("dealer_city") as string) ?? "");
     fd.append("dealer_phone", (data.get("dealer_phone") as string) ?? "");
     photos.forEach((p) => fd.append("photos", p));
-    if (audioBlob) fd.append("audio", audioBlob, "voice.webm");
+    if (audioBlob) {
+      // Name the file by its real format so OpenAI can parse it (iOS records mp4).
+      const t = audioBlob.type || "audio/webm";
+      const ext = t.includes("mp4") || t.includes("m4a")
+        ? "mp4"
+        : t.includes("mpeg") || t.includes("mp3")
+        ? "mp3"
+        : t.includes("wav")
+        ? "wav"
+        : t.includes("ogg")
+        ? "ogg"
+        : "webm";
+      fd.append("audio", audioBlob, `voice.${ext}`);
+    }
 
     try {
       const res = await fetch("/api/listings/create", { method: "POST", body: fd });

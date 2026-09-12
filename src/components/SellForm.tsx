@@ -8,6 +8,45 @@ const inputClass =
   "w-full rounded-sm border border-hairline bg-canvas px-4 py-3 text-[15px] text-ink " +
   "placeholder:text-muted-soft outline-none transition focus:border-ink focus:ring-2 focus:ring-ink/10";
 
+// Downscale + re-encode photos to JPEG in the browser before upload, so the
+// request stays under Vercel's 4.5MB body limit (real iPhone photos are large).
+// On iOS Safari this also converts HEIC → JPEG at the source.
+function loadImage(file: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("decode failed"));
+    };
+    img.src = url;
+  });
+}
+
+async function compressImage(file: File): Promise<Blob> {
+  try {
+    const img = await loadImage(file);
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.8));
+    return blob ?? file;
+  } catch {
+    return file; // fall back to original; the server normalizes HEIC as a safety net
+  }
+}
+
 export default function SellForm() {
   const router = useRouter();
   const [photos, setPhotos] = useState<File[]>([]);
@@ -76,7 +115,8 @@ export default function SellForm() {
     fd.append("dealer_name", (data.get("dealer_name") as string) ?? "");
     fd.append("dealer_city", (data.get("dealer_city") as string) ?? "");
     fd.append("dealer_phone", (data.get("dealer_phone") as string) ?? "");
-    photos.forEach((p) => fd.append("photos", p));
+    const compressed = await Promise.all(photos.map(compressImage));
+    compressed.forEach((b, i) => fd.append("photos", b, `photo-${i}.jpg`));
     if (audioBlob) {
       // Name the file by its real format so OpenAI can parse it (iOS records mp4).
       const t = audioBlob.type || "audio/webm";
@@ -94,7 +134,15 @@ export default function SellForm() {
 
     try {
       const res = await fetch("/api/listings/create", { method: "POST", body: fd });
-      const json = await res.json();
+      if (res.status === 413) {
+        throw new Error("Your photos are too large. Please try fewer photos.");
+      }
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error("Something went wrong. Please try again.");
+      }
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Something went wrong.");
       router.push(`/${json.slug}`);
     } catch (err) {
